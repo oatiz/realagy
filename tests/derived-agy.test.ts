@@ -4,6 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, test, vi } from "vitest";
+// Budget selectors are tested separately; preserve this synthetic ELF's scope.
+vi.mock("../src/acp/customization-budget-patch.js", () => ({ patchAgyCustomizationBudget: (source: Buffer) => ({ data: source, offset: 0 }) }));
 // This cache fixture has no Go pclntab; supply its function boundaries while
 // keeping the real decorator and serializer patchers under test.
 vi.mock("../src/acp/go-symbols.js", () => ({
@@ -74,7 +76,7 @@ test("the full-output derivative is cached by source hash and leaves the source 
 	const options = { fullMcpOutput: true, cacheDir, log: (msg: string) => logs.push(msg) };
 	const [first, concurrent] = await Promise.all([deriveAgy(sourcePath, options), deriveAgy(sourcePath, options)]);
 	assert.equal(first, concurrent);
-	assert.equal(path.basename(first), `agy-${hash}-${AGY_PATCH_REVISION}-full-mcp-output`);
+	assert.equal(path.basename(first), `agy-${hash}-${AGY_PATCH_REVISION}-customization-budget+full-mcp-output`);
 	assert.deepEqual(fs.readdirSync(cacheDir).sort(), [path.basename(first), `${path.basename(first)}.sha256`]);
 	assert.deepEqual(fs.readFileSync(first), patched(source));
 	assert.deepEqual(fs.readFileSync(sourcePath), source);
@@ -95,11 +97,11 @@ test("a corrupt derivative is rebuilt", async () => {
 	assert.deepEqual(fs.readFileSync(output), patched(fixture()));
 });
 
-test("an agy upgrade replaces the derivative; disabling patches uses the source", async () => {
+test("an agy upgrade replaces the derivative; disabling optional patches still derives a private binary", async () => {
 	const source = fixture();
 	const { sourcePath, cacheDir } = setup(source);
 	const first = await deriveAgy(sourcePath, { fullMcpOutput: true, cacheDir });
-	assert.equal(await deriveAgy(sourcePath, { fullMcpOutput: false, cacheDir }), sourcePath);
+	assert.notEqual(await deriveAgy(sourcePath, { fullMcpOutput: false, cacheDir }), sourcePath);
 
 	const upgraded = fixture();
 	upgraded[0x1800] = 0x42;
@@ -126,6 +128,6 @@ test("a patch that does not apply is an error and writes nothing", async () => {
 	assert.deepEqual(fs.readFileSync(serializerCase.sourcePath), missingSerializer);
 
 	const c = setup(Buffer.from("#!/bin/sh\n"));
-	assert.equal(await deriveAgy(c.sourcePath, { fullMcpOutput: false, cacheDir: c.cacheDir }), c.sourcePath);
+	await assert.rejects(deriveAgy(c.sourcePath, { fullMcpOutput: false, cacheDir: c.cacheDir }));
 	assert.equal(fs.existsSync(c.cacheDir), false);
 });

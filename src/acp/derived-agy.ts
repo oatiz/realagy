@@ -1,15 +1,14 @@
-// Derive realagy's private agy executable when context unlocking or full MCP
-// output is enabled. The source is read once, all enabled patches are applied
-// to the same in-memory copy, then the result is signed once, verified by
-// SHA-256, and cached in derived-bin/. A patch failure aborts startup; the
-// installed agy is never opened for writing. With both patches disabled the
-// source path is returned.
+// Derive realagy's private agy executable with a customization-budget patch
+// and any enabled context/output patches. The source is read once, patched,
+// signed once, verified by SHA-256, and cached; failures abort startup without
+// modifying the installed agy.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { inspectExecutable, signMacOSBinary } from "./binary-image.js";
 import { patchAgyContextUnlock } from "./context-unlock.js";
+import { patchAgyCustomizationBudget } from "./customization-budget-patch.js";
 import { patchAgyMcpOutput } from "./output-patch.js";
 
 const CACHE_DIR = path.join(getAgentDir(), "realagy", "derived-bin");
@@ -17,7 +16,7 @@ const CONTEXT_PATCH = "context-unlock";
 const OUTPUT_PATCH = "full-mcp-output";
 // Bump when patch logic changes: an agy source hash alone cannot invalidate
 // a verified but obsolete derivative produced by an earlier realagy version.
-export const AGY_PATCH_REVISION = "v2";
+export const AGY_PATCH_REVISION = "v3";
 export interface DeriveAgyOptions {
 	/** Apply the full-MCP-output patch; failure to apply it is an error. */
 	fullMcpOutput: boolean;
@@ -97,12 +96,13 @@ async function derive(sourcePath: string, options: DeriveAgyOptions, cacheDir: s
 	const source = await fs.promises.readFile(sourcePath);
 	const sourceHash = sha256(source);
 	const image = inspectExecutable(source);
-	const patches = [...(contextUnlock ? [CONTEXT_PATCH] : []), ...(fullMcpOutput ? [OUTPUT_PATCH] : [])];
+	const patches = ["customization-budget", ...(contextUnlock ? [CONTEXT_PATCH] : []), ...(fullMcpOutput ? [OUTPUT_PATCH] : [])];
 	const output = path.join(cacheDir, `agy-${sourceHash}-${AGY_PATCH_REVISION}-${patches.join("+")}${image.format === "pe" ? ".exe" : ""}`);
 	if (!(await validCache(output))) {
 		// Any patch that does not apply aborts derivation; nothing is written.
-		let data: Buffer = source;
-		const details: Record<string, unknown> = {};
+		const budget = patchAgyCustomizationBudget(source);
+		let data: Buffer = budget.data;
+		const details: Record<string, unknown> = { customizationBudget: budget.offset };
 		if (contextUnlock) {
 			const patched = patchAgyContextUnlock(data);
 			data = patched.data;
@@ -127,7 +127,6 @@ const inFlight = new Map<string, Promise<string>>();
  *  when agy's bytes or the requested patches changed. */
 export function deriveAgy(sourcePath: string, options: DeriveAgyOptions): Promise<string> {
 	const source = path.resolve(sourcePath);
-	if (!options.fullMcpOutput && !options.contextUnlock) return Promise.resolve(source);
 	const cacheDir = options.cacheDir ?? CACHE_DIR;
 	const key = `${source}\0${cacheDir}\0${options.fullMcpOutput}\0${options.contextUnlock === true}`;
 	let pending = inFlight.get(key);
