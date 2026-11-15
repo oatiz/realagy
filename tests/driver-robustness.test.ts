@@ -45,6 +45,25 @@ async function waitFor(wire: () => WireRequest[], method: string, count = 1): Pr
 	}
 }
 
+
+test("turn model selects its agent profile, including after concurrent discovery", async () => {
+	const { driver, logs } = fixture({}, () => ({ agent: (model) => model?.includes("orchestrator") ? "orchestrator" : "ordinary" }));
+	try {
+		const [models, first] = await Promise.all([
+			driver.listModels(process.cwd()),
+			driver.run({ ...base, model: "gemini-pro-orchestrator", prompt: "first" }),
+		]);
+		assert.ok(models.length);
+		await drain(first);
+		assert.equal((await first.outcome).status, "OK");
+		const second = await driver.run({ ...base, prompt: "second" });
+		await drain(second);
+		assert.equal((await second.outcome).status, "OK");
+		assert.ok(logs.filter((message) => message === "agent-changed").length >= 2);
+	} finally {
+		await driver.close();
+	}
+});
 test("Esc sends session/cancel as a notification and keeps the process and session", async () => {
 	const { driver, wire, logs } = fixture();
 	try {

@@ -49,7 +49,7 @@ export const PROFILE_PROMPT = [
 const yamlString = (value: string) => JSON.stringify(value);
 
 /** Profile file content for the bridged pi tool names. */
-export function agentProfileMarkdown(name: string, toolNames: readonly string[]): string {
+export function agentProfileMarkdown(name: string, toolNames: readonly string[], orchestrator = false): string {
 	const tools = [...new Set(toolNames.filter((tool) => tool.length > 0))];
 	const lines = [
 		"---",
@@ -60,24 +60,26 @@ export function agentProfileMarkdown(name: string, toolNames: readonly string[])
 		"mcpServers:",
 		"  - name: pi-bridge",
 	];
+	if (orchestrator) lines.splice(lines.indexOf("mcpServers:"), 0, "tools:", "  - exit_plan_mode", "  - enter_plan_mode");
 	if (tools.length > 0) {
 		lines.push("    tools:");
 		for (const tool of tools) lines.push(`      ${yamlString(tool)}:`, "        eager: true");
 	}
-	lines.push("---", PROFILE_PROMPT, "");
+	lines.push("---", orchestrator ? PROFILE_PROMPT.replace("Do the work yourself, in the foreground: do not start background tasks.", "Use the native planning and execution handoff tools when the phase protocol requires them. Work in the foreground; do not start background tasks or subagents.") : PROFILE_PROMPT, "");
 	return lines.join("\n");
 }
 
 /** Name and content for a tool set; the name hashes the content, so pi
  *  instances with different tool sets never share (and overwrite) a file. */
-export function agentProfile(toolNames: readonly string[]): { name: string; content: string } {
+export function agentProfile(toolNames: readonly string[], orchestrator = false): { name: string; content: string } {
 	// The name is part of the content: hash a name-free rendering.
-	const digest = crypto.createHash("sha256").update(agentProfileMarkdown("", toolNames)).digest("hex").slice(0, 12);
+	const digest = crypto.createHash("sha256").update(agentProfileMarkdown("", toolNames, orchestrator)).digest("hex").slice(0, 12);
 	const name = `${PROFILE_PREFIX}${digest}`;
-	return { name, content: agentProfileMarkdown(name, toolNames) };
+	return { name, content: agentProfileMarkdown(name, toolNames, orchestrator) };
 }
 
 export interface InstallOptions {
+	orchestrator?: boolean;
 	dir?: string;
 	now?: number;
 	log?: (msg: string, data?: unknown) => void;
@@ -90,7 +92,7 @@ export interface InstallOptions {
 export function installAgentProfile(toolNames: readonly string[], opts: InstallOptions = {}): string | undefined {
 	const dir = opts.dir ?? agentProfileDir();
 	const now = opts.now ?? Date.now();
-	const { name, content } = agentProfile(toolNames);
+	const { name, content } = agentProfile(toolNames, opts.orchestrator);
 	const file = path.join(dir, `${name}.md`);
 	try {
 		let current: string | undefined;

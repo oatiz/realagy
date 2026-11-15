@@ -34,6 +34,17 @@ test("the profile name follows the tool set only", () => {
 	assert.notEqual(agentProfile(["a", "b"]).name, agentProfile(["a", "c"]).name);
 });
 
+test("orchestrator profile enables native phase tools without exposing them to other models", () => {
+	const normal = agentProfile(["read"]);
+	const orchestrator = agentProfile(["read"], true);
+	assert.notEqual(orchestrator.name, normal.name);
+	assert.match(orchestrator.content, /^tools:\n  - exit_plan_mode\n  - enter_plan_mode$/m);
+	assert.match(orchestrator.content, /"read":\n        eager: true/);
+	assert.match(orchestrator.content, /native planning and execution handoff tools/);
+	assert.doesNotMatch(normal.content, /exit_plan_mode|enter_plan_mode/);
+	const dir = tmp();
+	assert.equal(installAgentProfile(["read"], { dir, orchestrator: true }), orchestrator.name);
+});
 test("install writes once, refreshes mtime, and prunes only idle realagy profiles", () => {
 	const dir = tmp();
 	const now = Date.now();

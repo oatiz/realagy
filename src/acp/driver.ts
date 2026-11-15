@@ -83,7 +83,7 @@ export interface AcpDriverOptions {
 	/** agy custom agent for the next spawn (`--agent`; src/agent-profile.ts).
 	 *  Evaluated per turn: when it differs from the live process's agent, the
 	 *  process is respawned before the turn. undefined = agy's default agent. */
-	agent?: () => string | undefined;
+	agent?: (model?: string) => string | undefined;
 	/** agy's `brain` directory, watched for background work that finishes
 	 *  after a prompt ended. undefined disables the watcher. */
 	brainDir?: () => string | undefined;
@@ -169,6 +169,7 @@ export class AcpDriver implements TurnDriver {
 	#conn: AcpConnection | undefined;
 	/** Pending start of #conn: concurrent callers share one handshake. */
 	#starting: Promise<AcpConnection> | undefined;
+	#catalogRequests = new Set<Promise<unknown>>();
 	#active: ActiveTurn | undefined;
 	#queueTail: Promise<void> = Promise.resolve();
 	#onTurnEnd: ((outcome: TurnOutcome) => void) | undefined;
@@ -191,7 +192,14 @@ export class AcpDriver implements TurnDriver {
 	}
 	/** Read the account's live catalog through the official ACP session flow,
 	 * enriched with upstream per-model token limits when the proxy is active. */
-	async listModels(cwd: string): Promise<Array<{ modelId: string; name?: string; contextWindow?: number; maxTokens?: number }>> {
+	listModels(cwd: string): Promise<Array<{ modelId: string; name?: string; contextWindow?: number; maxTokens?: number }>> {
+		const request = this.#listModels(cwd);
+		this.#catalogRequests.add(request);
+		void request.then(() => this.#catalogRequests.delete(request), () => this.#catalogRequests.delete(request));
+		return request;
+	}
+
+	async #listModels(cwd: string): Promise<Array<{ modelId: string; name?: string; contextWindow?: number; maxTokens?: number }>> {
 		const conn = await this.#ensureConnection(cwd);
 		const session = await conn.newSession(cwd);
 		this.#opts.sessionRetention?.created(session.sessionId, conn.pid);
@@ -316,8 +324,11 @@ export class AcpDriver implements TurnDriver {
 
 	async #executeTurn(turn: ActiveTurn): Promise<void> {
 		const request = turn.request;
-		this.#retireStaleAgent();
-		const conn = await this.#ensureConnection(request.cwd);
+		// A concurrent catalog startup may still be using another profile.
+		await Promise.allSettled([...this.#catalogRequests]);
+		if (this.#starting) await this.#starting;
+		this.#retireStaleAgent(request.model);
+		const conn = await this.#ensureConnection(request.cwd, request.model);
 		if (turn.closed) return;
 		turn.conn = conn;
 
@@ -696,9 +707,9 @@ export class AcpDriver implements TurnDriver {
 
 	/** The live connection, spawning one if needed. Concurrent callers share a
 	 *  pending start, so no request ever precedes the initialize handshake. */
-	#resolveAgent(): string | undefined {
+	#resolveAgent(model?: string): string | undefined {
 		try {
-			return this.#opts.agent?.();
+			return this.#opts.agent?.(model);
 		} catch (err) {
 			this.#log("agent-failed", { message: describe(err) });
 			return undefined;
@@ -709,11 +720,11 @@ export class AcpDriver implements TurnDriver {
 	 *  bridged tool set changed): tear it down so the turn respawns with the
 	 *  new profile. Turns are serialized, so no turn runs on it; remembered
 	 *  sessions resume in the new process. */
-	#retireStaleAgent(): void {
+	#retireStaleAgent(model?: string): void {
 		const conn = this.#conn;
 		if (this.#starting || !conn?.alive) return;
 		if (this.#opts.agent) {
-			const agent = this.#resolveAgent();
+			const agent = this.#resolveAgent(model);
 			if (agent !== conn.agent) {
 				this.#log("agent-changed", { from: conn.agent ?? null, to: agent ?? null });
 				this.#conn = undefined;
@@ -737,10 +748,10 @@ export class AcpDriver implements TurnDriver {
 		}
 	}
 
-	#ensureConnection(cwd: string): Promise<AcpConnection> {
+	#ensureConnection(cwd: string, model?: string): Promise<AcpConnection> {
 		if (this.#starting) return this.#starting;
 		if (this.#conn?.alive) return Promise.resolve(this.#conn);
-		const starting = this.#startConnection(cwd);
+		const starting = this.#startConnection(cwd, model);
 		this.#starting = starting;
 		const clear = (): void => {
 			if (this.#starting === starting) this.#starting = undefined;
@@ -767,8 +778,8 @@ export class AcpDriver implements TurnDriver {
 		return (this.#opts.deriveBin ?? deriveAgy)(this.#sourceBin(), { fullMcpOutput, contextUnlock, log: (msg, data) => this.#log(msg, data) });
 	}
 
-	async #startConnection(cwd: string): Promise<AcpConnection> {
-		const agent = this.#resolveAgent();
+	async #startConnection(cwd: string, model?: string): Promise<AcpConnection> {
+		const agent = this.#resolveAgent(model);
 		let conn: AcpConnection | undefined;
 		let bin = this.#sourceBin();
 		try {

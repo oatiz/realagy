@@ -97,9 +97,11 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 		systemPrompt: (agent) => toolPolicyPrompt(bridgedTools().map((tool) => tool.name), { profile: agent !== undefined }),
 		// Every bridged tool (and the poll helper) is marked eager in the
 		// profile; without the bridge, agy's default agent keeps its own tools.
-		agent: () =>
+		agent: (model) =>
 			bridge && config.agentProfile
-				? installAgentProfile([...bridgedTools().map((tool) => tool.name), POLL_TOOL_NAME])
+				? installAgentProfile([...bridgedTools().map((tool) => tool.name), POLL_TOOL_NAME], {
+					orchestrator: model === "gemini-pro-orchestrator" || model === "gemini-pro-orchestrator-argon",
+				})
 				: undefined,
 		onNativeTool: (event) => workPanel.update(event),
 		brainDir: () => defaultBrainDir(),
