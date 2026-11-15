@@ -1,0 +1,68 @@
+[
+  {
+    "platform": "linux-x64",
+    "version": "1.5.9",
+    "sourceSha256": "39816d49d5ab92229952987225c23ea3fed7580699dcb4a444e0388e0ac1ce43",
+    "arch": "x64",
+    "kind": "legacy",
+    "selectorOffset": 8,
+    "selectorSize": 53,
+    "native": "89d8e8a18e0bff9083f808740583f8137526488b4c2420488b094885c97412488b49780f1f4400004885c974048b09eb0231c94863c9eb05488b4c24084889c8c9c3488944",
+    "contextUnlocked": "89d8e8a18e0bff9083f808740583f813752631c0e927000000094885c97412488b49780f1f4400004885c974048b09eb0231c94863c9eb05488b4c24084889c8c9c3488944"
+  },
+  {
+    "platform": "linux-x64",
+    "version": "1.5.9",
+    "sourceSha256": "39816d49d5ab92229952987225c23ea3fed7580699dcb4a444e0388e0ac1ce43",
+    "arch": "x64",
+    "kind": "serializer",
+    "selectorOffset": 8,
+    "selectorSize": 32,
+    "native": "0200008b5208669083fa0e750a488bbc2438020000eb1183fa17750431ffeb08488bbc24300200004885ff7f0d488b94",
+    "contextUnlocked": "0200008b5208669083fa0e750a31ff909090909090eb1183fa17750431ffeb08488bbc24300200004885ff7f0d488b94"
+  },
+  {
+    "platform": "windows-x64",
+    "version": "1.5.9",
+    "sourceSha256": "8803c289cac04d6e53f2211592d9981c2d5760bc0d9b4a7f222ef6ecc7abb38a",
+    "arch": "x64",
+    "kind": "legacy",
+    "selectorOffset": 8,
+    "selectorSize": 53,
+    "native": "89d8e801a908ff9083f808740583f8137526488b4c2420488b094885c97412488b49780f1f4400004885c974048b09eb0231c94863c9eb05488b4c24084889c8c9c3488944",
+    "contextUnlocked": "89d8e801a908ff9083f808740583f813752631c0e927000000094885c97412488b49780f1f4400004885c974048b09eb0231c94863c9eb05488b4c24084889c8c9c3488944"
+  },
+  {
+    "platform": "windows-x64",
+    "version": "1.5.9",
+    "sourceSha256": "8803c289cac04d6e53f2211592d9981c2d5760bc0d9b4a7f222ef6ecc7abb38a",
+    "arch": "x64",
+    "kind": "serializer",
+    "selectorOffset": 8,
+    "selectorSize": 32,
+    "native": "0200008b5208669083fa0e750a488bbc2438020000eb1183fa17750431ffeb08488bbc24300200004885ff7f0d488b94",
+    "contextUnlocked": "0200008b5208669083fa0e750a31ff909090909090eb1183fa17750431ffeb08488bbc24300200004885ff7f0d488b94"
+  },
+  {
+    "platform": "macos-arm64",
+    "version": "1.5.9",
+    "sourceSha256": "fad3628ad91fe8613a72f074a1c5fde7cd816517788a5b9be96703f7d256741a",
+    "arch": "arm64",
+    "kind": "legacy",
+    "selectorOffset": 8,
+    "selectorSize": 60,
+    "native": "e00301aa0609cb971f200071600000541f4c007161010054e11740f9210040f9a10000b4213c40f9610000b4210080b902000014e1031faa227c409302000014e20b40f9e00302aafd835ff8",
+    "contextUnlocked": "e00301aa0609cb971f200071600000541f4c007161010054e2031faa0a000014a10000b4213c40f9610000b4210080b902000014e1031faa227c409302000014e20b40f9e00302aafd835ff8"
+  },
+  {
+    "platform": "macos-arm64",
+    "version": "1.5.9",
+    "sourceSha256": "fad3628ad91fe8613a72f074a1c5fde7cd816517788a5b9be96703f7d256741a",
+    "arch": "arm64",
+    "kind": "serializer",
+    "selectorOffset": 8,
+    "selectorSize": 28,
+    "native": "e57741f9a50880b9bf380071c0000054bf5c007161000054e4031faa02000014e40303aa9f0000f16c000054",
+    "contextUnlocked": "e57741f9a50880b9bf38007160000054bf5c007161000054e4031faa02000014e40303aa9f0000f16c000054"
+  }
+]

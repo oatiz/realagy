@@ -1,18 +1,18 @@
-// Full-MCP-output patch: disable agy's tool-output decorator. Applied in memory
-// by src/acp/derived-agy.ts, which writes realagy's single private agy copy.
+// Full MCP output has two gates: the preview decorator and model-input
+// serialization. deriveAgy uses patchAgyMcpOutput to bypass both in its private
+// executable; patchAgyOutputTruncation below is the decorator-only primitive.
 //
-// agy 1.5.3 stores complete MCP results, but its decorator gives the model a
-// truncated preview. The patch replaces only the decorator construction's
-// conditional "return the original tool" branch with an unconditional branch
-// to the same target. It does not touch auth, client identity, telemetry,
-// request signing, session management, or trajectory rendering.
+// The decorator's conditional "return the original tool" branch becomes an
+// unconditional branch to the same target. The serializer patch separately
+// preserves non-MCP limits and the selected USER_INPUT policy. Neither changes
+// auth, client identity, telemetry, request signing, or session management.
 //
-// Fixed offsets are deliberately not used: every source is hashed and scanned
-// for one unique instruction signature inside executable code. An upgrade works
-// only while the relevant machine code is recognisable; otherwise startup fails
-// instead of patching an unrelated address.
+// Decorator signatures and symbol-bounded serializer layouts must be uniquely
+// recognizable inside executable code. Unknown upgrades fail startup rather
+// than patching an unrelated address or silently using an incomplete bypass.
 
 import { inspectExecutable, type ExecutableImage, type ExecutableRegion } from "./binary-image.js";
+import { patchMcpSerialization, type McpSerializationPatchResult } from "./mcp-serialization-patch.js";
 
 
 interface PatchAdapter {
@@ -135,4 +135,12 @@ export function patchAgyOutputTruncation(source: Buffer): OutputPatchResult {
 	const data = Buffer.from(source);
 	const target = adapter.patch(data, offset, vaddr, image.executable);
 	return { data, format: image.format, arch: image.arch, offset, target };
+}
+
+/** Complete MCP bypass: decorator plus both native model-input serializers.
+ * Apply after context unlocking, and preserve its USER_INPUT decision. */
+export function patchAgyMcpOutput(source: Buffer, userInputUnlocked = false): OutputPatchResult & { serialization: McpSerializationPatchResult["gates"] } {
+	const decorator = patchAgyOutputTruncation(source);
+	const serialization = patchMcpSerialization(decorator.data, userInputUnlocked);
+	return { ...decorator, data: serialization.data, serialization: serialization.gates };
 }

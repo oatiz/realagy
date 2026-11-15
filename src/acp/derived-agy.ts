@@ -10,11 +10,14 @@ import path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { inspectExecutable, signMacOSBinary } from "./binary-image.js";
 import { patchAgyContextUnlock } from "./context-unlock.js";
-import { patchAgyOutputTruncation } from "./output-patch.js";
+import { patchAgyMcpOutput } from "./output-patch.js";
 
 const CACHE_DIR = path.join(getAgentDir(), "realagy", "derived-bin");
 const CONTEXT_PATCH = "context-unlock";
 const OUTPUT_PATCH = "full-mcp-output";
+// Bump when patch logic changes: an agy source hash alone cannot invalidate
+// a verified but obsolete derivative produced by an earlier realagy version.
+export const AGY_PATCH_REVISION = "v2";
 export interface DeriveAgyOptions {
 	/** Apply the full-MCP-output patch; failure to apply it is an error. */
 	fullMcpOutput: boolean;
@@ -95,7 +98,7 @@ async function derive(sourcePath: string, options: DeriveAgyOptions, cacheDir: s
 	const sourceHash = sha256(source);
 	const image = inspectExecutable(source);
 	const patches = [...(contextUnlock ? [CONTEXT_PATCH] : []), ...(fullMcpOutput ? [OUTPUT_PATCH] : [])];
-	const output = path.join(cacheDir, `agy-${sourceHash}-${patches.join("+")}${image.format === "pe" ? ".exe" : ""}`);
+	const output = path.join(cacheDir, `agy-${sourceHash}-${AGY_PATCH_REVISION}-${patches.join("+")}${image.format === "pe" ? ".exe" : ""}`);
 	if (!(await validCache(output))) {
 		// Any patch that does not apply aborts derivation; nothing is written.
 		let data: Buffer = source;
@@ -106,9 +109,9 @@ async function derive(sourcePath: string, options: DeriveAgyOptions, cacheDir: s
 			details.context = patched.gates;
 		}
 		if (fullMcpOutput) {
-			const patched = patchAgyOutputTruncation(data);
+			const patched = patchAgyMcpOutput(data, contextUnlock);
 			data = patched.data;
-			details.output = { offset: patched.offset, target: patched.target };
+			details.output = { offset: patched.offset, target: patched.target, serialization: patched.serialization };
 		}
 		await fs.promises.mkdir(cacheDir, { recursive: true, mode: 0o700 });
 		const outputSha256 = await write(output, data, image.format === "macho");

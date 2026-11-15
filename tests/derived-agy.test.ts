@@ -3,9 +3,19 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, test } from "vitest";
-import { deriveAgy } from "../src/acp/derived-agy.js";
-import { patchAgyOutputTruncation } from "../src/acp/output-patch.js";
+import { afterEach, test, vi } from "vitest";
+// This cache fixture has no Go pclntab; supply its function boundaries while
+// keeping the real decorator and serializer patchers under test.
+vi.mock("../src/acp/go-symbols.js", () => ({
+	findGoText: () => ({ format: "elf", arch: "x64", textOff: 0x1000, textVa: 0x400000 }),
+	buildGoFunctions: () => new Map([
+		["chatconverters.(*TrajectoryChatConverter).getMaxTokensForStep", { entryOff: 0x600, size: 69 }],
+		["serializers.DefaultSerializer.stepToMessage", { entryOff: 0x700, size: 48 }],
+	]),
+}));
+import { AGY_PATCH_REVISION, deriveAgy } from "../src/acp/derived-agy.js";
+import { patchAgyMcpOutput } from "../src/acp/output-patch.js";
+const selectors = JSON.parse(fs.readFileSync(new URL("./fixtures/mcp-limit-selectors-1.5.9.json", import.meta.url), "utf8")) as Array<{ platform: string; kind: string; native: string }>;
 
 const SEGMENT_OFFSET = 0x1000;
 const SEGMENT_VADDR = 0x400000;
@@ -35,6 +45,10 @@ function fixture(): Buffer {
 	data.set([0x48, 0x85, 0xf6, 0x0f, 0x84, 0x20, 0, 0, 0], SECOND);
 	data.set([0x48, 0x85, 0xd2, 0x0f, 0x84, 0x20, 0, 0, 0], THIRD);
 	data.set([0x48, 0x85, 0xd2, 0x0f, 0x8e, 0x20, 0, 0, 0, 0x48, 0x89, 0x54, 0x24, 0x38, 0xb8, 0x28, 0, 0, 0], OUTPUT);
+	for (const [kind, at] of [["legacy", 0x1600], ["serializer", 0x1700]] as const) {
+		const vector = selectors.find((v) => v.platform === "linux-x64" && v.kind === kind)!;
+		data.set(Buffer.from(vector.native, "hex"), at);
+	}
 	return data;
 }
 
@@ -51,7 +65,7 @@ function setup(source: Buffer): { sourcePath: string; cacheDir: string; hash: st
 	return { sourcePath, cacheDir: path.join(root, "derived-bin"), hash: crypto.createHash("sha256").update(source).digest("hex") };
 }
 
-const patched = (source: Buffer): Buffer => patchAgyOutputTruncation(source).data;
+const patched = (source: Buffer): Buffer => patchAgyMcpOutput(source).data;
 
 test("the full-output derivative is cached by source hash and leaves the source untouched", async () => {
 	const source = fixture();
@@ -60,7 +74,7 @@ test("the full-output derivative is cached by source hash and leaves the source 
 	const options = { fullMcpOutput: true, cacheDir, log: (msg: string) => logs.push(msg) };
 	const [first, concurrent] = await Promise.all([deriveAgy(sourcePath, options), deriveAgy(sourcePath, options)]);
 	assert.equal(first, concurrent);
-	assert.equal(path.basename(first), `agy-${hash}-full-mcp-output`);
+	assert.equal(path.basename(first), `agy-${hash}-${AGY_PATCH_REVISION}-full-mcp-output`);
 	assert.deepEqual(fs.readdirSync(cacheDir).sort(), [path.basename(first), `${path.basename(first)}.sha256`]);
 	assert.deepEqual(fs.readFileSync(first), patched(source));
 	assert.deepEqual(fs.readFileSync(sourcePath), source);
@@ -103,6 +117,13 @@ test("a patch that does not apply is an error and writes nothing", async () => {
 	const b = setup(noOutput);
 	await assert.rejects(deriveAgy(b.sourcePath, { fullMcpOutput: true, cacheDir: b.cacheDir }), /full-MCP-output agy: expected one output-decorator signature, found 0/);
 	assert.equal(fs.existsSync(b.cacheDir), false);
+
+	const missingSerializer = fixture();
+	missingSerializer.fill(0, 0x1708, 0x1708 + 32);
+	const serializerCase = setup(missingSerializer);
+	await assert.rejects(deriveAgy(serializerCase.sourcePath, { fullMcpOutput: true, cacheDir: serializerCase.cacheDir }), /serializer MCP limit selector/);
+	assert.equal(fs.existsSync(serializerCase.cacheDir), false, "no decorator-only fallback is published");
+	assert.deepEqual(fs.readFileSync(serializerCase.sourcePath), missingSerializer);
 
 	const c = setup(Buffer.from("#!/bin/sh\n"));
 	assert.equal(await deriveAgy(c.sourcePath, { fullMcpOutput: false, cacheDir: c.cacheDir }), c.sourcePath);
