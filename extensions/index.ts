@@ -223,7 +223,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 		}
 		ctx.ui.notify(result.missing
 			? `Antigravity: ${result.error}. Run /realagy setup for install steps.`
-			: `Antigravity model discovery failed: ${result.error}. Run /realagy setup to sign in.`, "warning");
+			: `Antigravity model discovery failed: ${result.error}. Check the CLI, network, and patch compatibility; run /realagy setup for details.`, "warning");
 	};
 
 	const syncWarmFromSession = (ctx: { sessionManager?: { getBranch?: () => unknown[]; getEntries?: () => unknown[] } }): boolean => {
@@ -438,7 +438,10 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 				} else if (result.missing) {
 					ctx.ui.notify(`Antigravity: ${result.error}.\n\n${MANUAL_SETUP}\n\nThen run /realagy setup again.`, "warning");
 				} else {
-					ctx.ui.notify(`Antigravity: ${bin} is installed but not usable: ${result.error}\n\n${SIGN_IN}`, "warning");
+					ctx.ui.notify(`Antigravity: ${bin} is installed but not usable: ${result.error}
+
+Check the CLI, network, and patch compatibility. If authentication is required:
+${SIGN_IN}`, "warning");
 				}
 				return;
 			}

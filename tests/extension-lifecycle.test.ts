@@ -218,6 +218,19 @@ describe("extension session lifecycle", () => {
 		expect(sessions.retirementCandidates.has("current")).toBe(true);
 		h.shutdown();
 	});
+	it("does not misdiagnose discovery and setup failures as sign-in errors", async () => {
+		mocks.ensure.mockReturnValue({ ok: true, bin: "/opt/homebrew/bin/agy" });
+		mocks.listModels.mockRejectedValue(new Error("Unsupported agy binary"));
+		const session = await start();
+		await vi.waitFor(() => expect(session.ui.notify).toHaveBeenCalled());
+		const startup = session.ui.notify.mock.calls[0]![0] as string;
+		expect(startup).toContain("Unsupported agy binary");
+		expect(startup).not.toContain("setup to sign in");
+		await session.commands.get("realagy").handler("setup", session.ctx);
+		const setup = session.ui.notify.mock.lastCall![0] as string;
+		expect(setup).toContain("If authentication is required");
+		session.shutdown();
+	});
 	it("prompts with install instructions when agy is missing and does not install", async () => {
 		mocks.ensure.mockReturnValue({ ok: false, error: "the Antigravity CLI (agy) is not installed", manual: "curl -fsSL https://antigravity.google/cli/install.sh | bash" });
 		const session = await start();

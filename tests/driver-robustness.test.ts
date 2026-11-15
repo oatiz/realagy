@@ -152,13 +152,13 @@ test("agy exiting mid-turn fails the turn with its exit code and last stderr lin
 test("a missing agy binary fails turns and discovery with a /realagy setup pointer", async () => {
 	const driver = new AcpDriver({ bin: path.join(os.tmpdir(), "realagy-no-such-agy") });
 	try {
-		await assert.rejects(driver.listModels(process.cwd()), /Cannot start the Antigravity CLI .*realagy-no-such-agy.*Run \/realagy setup/);
+		await assert.rejects(driver.listModels(process.cwd()), /Cannot start the Antigravity CLI .*realagy-no-such-agy.*retry \/realagy setup/);
 		const handle = await driver.run({ ...base, prompt: "hi" });
 		await drain(handle);
 		const outcome = await handle.outcome;
 		assert.equal(outcome.status, "ERROR");
 		assert.match(outcome.error ?? "", /ENOENT/);
-		assert.match(outcome.error ?? "", /Run \/realagy setup/);
+		assert.match(outcome.error ?? "", /retry \/realagy setup/);
 	} finally {
 		await driver.close();
 	}

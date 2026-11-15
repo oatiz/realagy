@@ -35,6 +35,7 @@ import { AcpConnection, type AcpExitInfo, type AcpMcpServer } from "./connection
 import { CatalogProxy } from "./catalog-proxy.js";
 import { isAgyRetryNotice, mapStopReason, mapUpdate, TextAccumulator, type AcpEditDiff } from "./events.js";
 import { deriveAgy } from "./derived-agy.js";
+import { resolveAgyLaunch } from "./agy-launch.js";
 import { conversationDbPath, lastStepIdx, readStepState, siblingUsage, summarizeSteps, userInputSince, type StepTokens, type StepUsage } from "./step-usage.js";
 import { nativeToolLabel, nativeToolTarget, PI_BRIDGE_SERVER, type NativeToolEvent } from "../native-tools.js";
 import { traceUsage } from "../usage-trace.js";
@@ -771,11 +772,11 @@ export class AcpDriver implements TurnDriver {
 
 	/** realagy's single private agy (src/acp/derived-agy.ts); explicit binArgs
 	 *  (test servers and other ACP implementations) use the binary as given. */
-	#deriveBin(): Promise<string> {
-		if (this.#opts.binArgs) return Promise.resolve(this.#sourceBin());
+	#deriveBin(source: string): Promise<string> {
+		if (this.#opts.binArgs) return Promise.resolve(source);
 		const fullMcpOutput = typeof this.#opts.fullMcpOutput === "function" ? this.#opts.fullMcpOutput() : this.#opts.fullMcpOutput !== false;
 		const contextUnlock = this.#noAutoCompaction();
-		return (this.#opts.deriveBin ?? deriveAgy)(this.#sourceBin(), { fullMcpOutput, contextUnlock, log: (msg, data) => this.#log(msg, data) });
+		return (this.#opts.deriveBin ?? deriveAgy)(source, { fullMcpOutput, contextUnlock, log: (msg, data) => this.#log(msg, data) });
 	}
 
 	async #startConnection(cwd: string, model?: string): Promise<AcpConnection> {
@@ -783,7 +784,9 @@ export class AcpDriver implements TurnDriver {
 		let conn: AcpConnection | undefined;
 		let bin = this.#sourceBin();
 		try {
-			bin = await this.#deriveBin();
+			const launch = this.#opts.binArgs ? { bin } : resolveAgyLaunch(bin);
+			bin = launch.bin;
+			bin = await this.#deriveBin(bin);
 			let binArgs = this.#opts.binArgs;
 			const useCatalogProxy = !binArgs && this.#noAutoCompaction();
 			if (useCatalogProxy) {
@@ -799,7 +802,7 @@ export class AcpDriver implements TurnDriver {
 				bin,
 				binArgs,
 				agent,
-				extraEnv: this.#opts.extraEnv,
+				extraEnv: { ...this.#opts.extraEnv, ...launch.extraEnv },
 				cwd,
 				mcpServers: this.#opts.mcpServers,
 				log: (msg, data) => this.#log(msg, data),
@@ -823,7 +826,7 @@ export class AcpDriver implements TurnDriver {
 				conn.kill();
 			}
 			this.#log("start-failed", { message: describe(err) });
-			throw new Error(`Cannot start the Antigravity CLI (${bin}): ${describe(err)}. Run /realagy setup.`);
+			throw new Error(`Cannot start the Antigravity CLI (${bin}): ${describe(err)}. Check the CLI and patch compatibility, then retry /realagy setup.`);
 		}
 	}
 
