@@ -40,7 +40,10 @@ test("orchestrator profile enables native phase tools without exposing them to o
 	assert.notEqual(orchestrator.name, normal.name);
 	assert.match(orchestrator.content, /^tools:\n  - exit_plan_mode\n  - enter_plan_mode$/m);
 	assert.match(orchestrator.content, /"read":\n        eager: true/);
-	assert.match(orchestrator.content, /native planning and execution handoff tools/);
+	assert.match(orchestrator.content, /<plan_execute_protocol>/);
+	assert.match(orchestrator.content, /## Planning turns/);
+	assert.match(orchestrator.content, /## Execution turns/);
+	assert.doesNotMatch(normal.content, /plan_execute_protocol/);
 	assert.doesNotMatch(normal.content, /exit_plan_mode|enter_plan_mode/);
 	const dir = tmp();
 	assert.equal(installAgentProfile(["read"], { dir, orchestrator: true }), orchestrator.name);

@@ -21,6 +21,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { ORCHESTRATOR_PROMPT } from "./orchestrator-prompt.js";
 
 export const PROFILE_PREFIX = "realagy-";
 /** Profiles not used (mtime) for this long are deleted. */
@@ -65,7 +66,16 @@ export function agentProfileMarkdown(name: string, toolNames: readonly string[],
 		lines.push("    tools:");
 		for (const tool of tools) lines.push(`      ${yamlString(tool)}:`, "        eager: true");
 	}
-	lines.push("---", orchestrator ? PROFILE_PROMPT.replace("Do the work yourself, in the foreground: do not start background tasks.", "Use the native planning and execution handoff tools when the phase protocol requires them. Work in the foreground; do not start background tasks or subagents.") : PROFILE_PROMPT, "");
+	const prompt = orchestrator
+		? [
+			PROFILE_PROMPT.replace(
+				"Do the work yourself, in the foreground: do not start background tasks.",
+				"Work in the foreground; do not start background tasks or subagents.",
+			),
+			ORCHESTRATOR_PROMPT,
+		].join("\n\n")
+		: PROFILE_PROMPT;
+	lines.push("---", prompt, "");
 	return lines.join("\n");
 }
 
